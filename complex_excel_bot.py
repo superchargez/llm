@@ -224,7 +224,7 @@ class ExcelAnalyzer:
         return text_regions
 
 class SmartExcelManager:
-    def __init__(self, excel_directory: str = "./excel_files"):
+    def __init__(self, excel_directory: str = "../excel_files"):
         self.excel_directory = Path(excel_directory)
         self.file_cache = {}
         self.content_cache = {}
