@@ -1,23 +1,23 @@
-from typing import Optional, List, Dict, Any, Union, Tuple
+from typing import Optional, List, Dict, Any, Tuple #, Union 
 import json
 import re
 from pathlib import Path
 import pandas as pd
-import numpy as np
+# import numpy as np
 import openpyxl
-from openpyxl.chart import Chart
-from openpyxl.drawing.image import Image
+# from openpyxl.chart import Chart
+# from openpyxl.drawing.image import Image
 # import pytesseract  # For extracting text from images if needed
-from PIL import Image as PILImage
-import io
-from fastapi import FastAPI, HTTPException
+# from PIL import Image as PILImage
+# import io
+from fastapi import FastAPI #, HTTPException
 from pydantic import BaseModel, Field
 from jinja2 import Template
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from datetime import datetime
-import random
-from typing_extensions import Literal
+# from datetime import datetime
+# import random
+# from typing_extensions import Literal
 import spacy  # For text analysis
 # from nltk.tokenize import sent_tokenize
 import logging
@@ -25,8 +25,6 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-from transformers.utils import get_json_schema
 
 app = FastAPI()
 
