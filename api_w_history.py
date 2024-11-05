@@ -3,9 +3,6 @@ import re
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
-import httpx
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from jinja2 import Template
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -150,5 +147,22 @@ async def query_model(request: QueryRequest, response: Response, request_obj: Re
     return response_data
 
 # curl -X POST "http://localhost:8384/query" -H "Content-Type: application/json" -d '{
-#   "query": "write a number between 301 and 999"
+#   "query": "write a number between 10 and 99"
 # }'
+
+# curl -c cookies.txt -X POST "http://localhost:8384/query" -H "Content-Type: application/json" -d '{
+#   "query": "Write a negative number between 0 and -99"
+# }'
+# cat cookies.txt
+
+# curl -X POST \
+#     -H "Content-Type: application/json" \
+#     -d '{ "query": "as a first question tell me a number between ten and thirty" }' \
+#     http://localhost:8384/query \
+#     -c cookies.txt  # Capture session cookie
+
+# curl -X POST \
+#     -H "Content-Type: application/json" \
+#     -b cookies.txt \
+#     -d '{ "query": "What is the current time?" }' \
+#     http://localhost:8384/query
