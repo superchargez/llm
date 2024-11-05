@@ -1,7 +1,9 @@
 import json
 import re
 from typing import Optional, List, Dict, Any
-
+from fastapi import FastAPI, HTTPException, Request, Response
+from pydantic import BaseModel
+import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from jinja2 import Template
@@ -119,24 +121,34 @@ class QueryRequest(BaseModel):
     history: Optional[List[Dict[str, str]]] = None
 
 @app.post("/query")
-async def query_model(request: QueryRequest):
-    messages = prepare_messages(request.query, tools=tools, history=request.history)
+async def query_model(request: QueryRequest, response: Response, request_obj: Request):
+    # Retrieve cookies from the request
+    history_cookie = request_obj.cookies.get("history")
+    history = json.loads(history_cookie) if history_cookie else []
+
+    # Prepare messages with the history
+    messages = prepare_messages(request.query, tools=tools, history=history)
     inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
     outputs = model.generate(inputs, max_new_tokens=512, do_sample=False, num_return_sequences=1, eos_token_id=tokenizer.eos_token_id)
     result = tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
     tool_calls = parse_response(result)
     
     if isinstance(tool_calls, str):
-        return {"response": tool_calls}
+        response_data = {"response": tool_calls}
+    else:
+        try:
+            tool_responses = [toolbox.get(tc["name"])(*tc["arguments"].values()) for tc in tool_calls]
+            response_data = {"tool_calls": tool_calls, "tool_responses": tool_responses}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     
-    try:
-        tool_responses = [toolbox.get(tc["name"])(*tc["arguments"].values()) for tc in tool_calls]
-        return {"tool_calls": tool_calls, "tool_responses": tool_responses}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Update history and set it in the response cookies
+    history.append({"role": "user", "content": request.query})
+    history.append({"role": "assistant", "content": response_data.get("response", "")})
+    response.set_cookie(key="history", value=json.dumps(history))
+    
+    return response_data
 
-# To run the server, use the command: uvicorn your_script_name:app --reload
 # curl -X POST "http://localhost:8384/query" -H "Content-Type: application/json" -d '{
-#   "query": "What is the current time?"
+#   "query": "write a number between 301 and 999"
 # }'
-
