@@ -128,7 +128,7 @@ Your response MUST follow this format:
 ]</tool_call>""")
 
 class ExcelManager:
-    def __init__(self, excel_directory: str = "./excel_files"):
+    def __init__(self, excel_directory: str = "../excel_files"):
         self.excel_directory = Path(excel_directory)
         self.file_cache = {}
         
