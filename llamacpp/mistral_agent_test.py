@@ -6,7 +6,7 @@ import socket
 
 class ExcelInspectorTool:
     def _call(self, query: str) -> dict:
-        file_path = query.split(" ")[1]  # Assuming the query is "Analyze <file_path>"
+        file_path = query.split(" ")[1]
         return excel_inspector(file_path)
 
 def excel_inspector(file_path):
@@ -70,5 +70,5 @@ Please respond in a structured format."""
 file_path = "../../excel_files/tickes_sales.xlsx"
 query = f"Analyze {file_path}"
 
-result = run_excel_agent(query)
-print(result)
+# result = run_excel_agent(query)
+# print(result)
