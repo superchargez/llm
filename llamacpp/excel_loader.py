@@ -113,10 +113,10 @@ class TableDetector:
         """
         sheets = self.read_file(file_path)
         results = {}
-        
+
         for sheet_name, df in sheets.items():
             results[sheet_name] = self.find_regions(df)
-            
+
         return results
 
 def print_regions(regions_by_sheet: Dict[str, List[Dict]]):
@@ -133,3 +133,9 @@ def print_regions(regions_by_sheet: Dict[str, List[Dict]]):
             print("\nSample data:")
             print(region['data'].head(3))
             print("..." if len(region['data']) > 3 else "")
+
+detector = TableDetector()
+
+regions = detector.process_file('ticket_sales.xlsx')
+
+print_regions(regions)
