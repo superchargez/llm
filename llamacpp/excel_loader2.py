@@ -1,72 +1,71 @@
-import os; os.chdir(r"../excel_files")
-import polars as pl
-from openpyxl import load_workbook
+from fastapi import FastAPI, File, UploadFile
+import pandas as pd
+import numpy as np
+import io
 
-def load_sheets_as_polars(file_path):
-    wb = load_workbook(file_path, data_only=True)
-    sheet_dataframes = {}
-    
-    for sheet_name in wb.sheetnames:
-        sheet = wb[sheet_name]
-        
-        # Extract rows as lists of values
-        data = [[cell.value for cell in row] for row in sheet.iter_rows()]
-        
-        # Create a Polars DataFrame with `strict=False` to handle mixed types
-        df = pl.DataFrame(data, strict=False)
-        df = df.drop_nulls()  # Drops fully null rows/columns
-        sheet_dataframes[sheet_name] = df
-    
-    return sheet_dataframes
+app = FastAPI()
 
-def detect_tables(df, max_empty_rows=2):
-    """
-    Detect possible tables in a Polars DataFrame based on clusters of populated rows.
+# Helper function to load Excel sheet into a Pandas DataFrame
+def load_sheet_to_pandas(file: bytes, sheet_name: str = None):
+    # Load the workbook and check for available sheets
+    workbook = pd.ExcelFile(io.BytesIO(file))
     
-    :param df: Polars DataFrame representing a sheet.
-    :param max_empty_rows: Maximum number of consecutive empty rows allowed within a table.
-    :return: List of detected tables (as Polars DataFrames).
-    """
+    # Use the specified sheet if it exists, otherwise default to the first sheet
+    if sheet_name not in workbook.sheet_names:
+        sheet_name = workbook.sheet_names[0]
+        print(f"Specified sheet '{sheet_name}' does not exist. Using first available sheet: '{sheet_name}'")
+
+    # Load the specified sheet into a DataFrame
+    df = pd.read_excel(workbook, sheet_name=sheet_name, header=None)
+    
+    return df
+
+# Main function to identify tables within a sheet
+def find_tables(df: pd.DataFrame, empty_threshold=90, window_size=100):
     tables = []
-    current_table = []
-    empty_row_count = 0
-
-    for row in df.rows():
-        non_empty_cells = sum(cell is not None for cell in row)
+    row_limit, col_limit = df.shape
+    
+    def is_range_empty(start_row, end_row, start_col, end_col):
+        # Extract the sub-dataframe and calculate the percentage of NaNs
+        sub_df = df.iloc[start_row:end_row, start_col:end_col]
+        empty_percentage = (sub_df.isna().sum().sum() / sub_df.size) * 100
+        return empty_percentage > empty_threshold
+    
+    row, col = 0, 0
+    
+    while row < row_limit and col < col_limit:
+        end_row, end_col = row + window_size, col + window_size
+        if end_row >= row_limit: end_row = row_limit
+        if end_col >= col_limit: end_col = col_limit
         
-        if non_empty_cells > 0:  # Row has data
-            # If there were any previous empty rows, reset the count and continue the current table
-            empty_row_count = 0
-            current_table.append(row)
-        else:  # Row is empty
-            empty_row_count += 1
-            # If the empty row count exceeds `max_empty_rows`, finalize the current table
-            if empty_row_count > max_empty_rows and current_table:
-                tables.append(pl.DataFrame(current_table, strict=False))
-                current_table = []  # Start a new table after gap
-
-    # Append any remaining data as the last table
-    if current_table:
-        tables.append(pl.DataFrame(current_table, strict=False))
+        if not is_range_empty(row, end_row, col, end_col):
+            # Identify table boundaries
+            table_start_row, table_start_col = row, col
+            
+            # Expand the end row and column until the end of the table is found
+            while end_col < col_limit and not is_range_empty(row, end_row, end_col, end_col + window_size):
+                end_col += window_size
+            while end_row < row_limit and not is_range_empty(end_row, end_row + window_size, col, end_col):
+                end_row += window_size
+            
+            # Append the found table's range
+            tables.append((table_start_row, end_row, table_start_col, end_col))
+            col = end_col  # Move to the next column block
+            
+        else:
+            col += window_size  # Shift the window to the right
+        
+        if col >= col_limit:
+            row += window_size
+            col = 0
     
     return tables
 
-def extract_tables(file_path):
-    sheets = load_sheets_as_polars(file_path)
-    all_tables = []
-
-    for sheet_name, df in sheets.items():
-        tables = detect_tables(df)
-        for table in tables:
-            all_tables.append((sheet_name, table))
-
-    return all_tables
-
-# Use this function to process a given Excel file
-file_path = 'ticket_sales.xlsx'
-tables = extract_tables(file_path)
-
-# Output each table as needed
-for sheet_name, table in tables:
-    print(f"Sheet: {sheet_name}")
-    print(table)
+@app.post("/extract-tables/")
+async def extract_tables(file: UploadFile = File(...), sheet_name: str = None):
+    file_bytes = await file.read()
+    df = load_sheet_to_pandas(file_bytes, sheet_name)
+    
+    tables = find_tables(df)
+    print(tables)
+    return {"tables": [{"start_row": r[0], "end_row": r[1], "start_col": r[2], "end_col": r[3]} for r in tables]}
