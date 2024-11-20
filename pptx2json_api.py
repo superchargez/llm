@@ -161,8 +161,8 @@ prompt = """Please extract all relevant metrics from the provided slide content,
    - If a person's or a country's or an organization's achievements are mentioned and it makes sense to put them as metrics then do so.
 
 4. **Exclusion Criteria:** Do not infer metrics or include information that is not explicitly mentioned in the slide content or spreadsheet. If no relevant metrics are present, omit the slide in the output.
-     If you encounter table of contents or meta information about pptx file or slide, in that case skip slide.
-     Also skip metrics that have null value.
+    - Important: If you encounter table of contents or meta information about pptx file or slide, in that case skip slide.
+    - Note: Also skip metrics that have null value. And skip slide from output if it does not contain relevant information or expected output is going to be empty list of metrics, or there are no events mentioned.
 
 5. **Output Format:** 
    ```json
