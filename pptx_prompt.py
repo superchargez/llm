@@ -4,6 +4,32 @@ Please extract all relevant metrics from the provided slide content, including e
 Contextual Information: Link each metric explicitly to its broader context as described in the slide text. Ensure that metrics extracted from the spreadsheet are understood and interpreted within the slide's context.
 Hierarchical Organization: Structure the output in a hierarchical JSON format that nests metrics under descriptive and meaningful keys derived from the slide content (e.g., event name, region, or category). If a metric is tied to a specific year or range of years, include this in the JSON structure.
 Explicit Descriptions: For each metric, include:
+A descriptive key (metric_name) to provide clear identification of the metric (e.g., "English Premier League Broadcasting Revenue 2020/21" or "Total Revenue of the English Premier League 2011/12 to 2022/23").
+The value as a numeric entry.
+For monetary values, include the currency key with the ISO 3-letter code (e.g., GBP for British pounds).
+Comprehensive Output: Ensure that the output includes all relevant metrics for all countries, regions, or categories mentioned in the input. If a spreadsheet or table is provided, include metrics for all rows and columns, unless explicitly excluded by the input.
+No Inference or Calculation: Do not infer or calculate any metrics that are not explicitly mentioned in the text or spreadsheet data. Only extract metrics that are directly provided in the input.
+Direct Extraction: Extract metrics directly from the spreadsheet data, including all rows and columns. Do not summarize or aggregate data unless explicitly stated in the input.
+Output Format:
+
+{ "event": { "event_name": "...", "event_date": "...", "metrics": { "[metric_name]": { "value": ..., // write full number if it is a thousand then write 1000. if it is million then write 1000000 and so on instead of writing 1 million or 1 billion. "currency": "...", }, ... } } }
+
+Specifically for this prompt, please ensure that the metric names are descriptive and include the following information:
+- The name of the league or competition (e.g., "English Premier League")
+- The type of revenue (e.g., "Broadcasting", "Commercial", "Matchday")
+- The year or range of years (e.g., "2020/21", "2011/12 to 2022/23")
+
+For example, a metric name could be "English Premier League Broadcasting Revenue 2020/21" or "English Premier League Total Revenue 2011/12 to 2022/23".
+
+Note: If a metric is not explicitly mentioned in the text or spreadsheet data, do not include it in the output. If a spreadsheet or table is provided, only extract metrics that are directly provided in the data, without summarizing or aggregating the data unless explicitly stated in the input.
+"""
+
+prompt_095 = """
+Please extract all relevant metrics from the provided slide content, including economic, social, environmental, and other metrics explicitly mentioned in the text and/or spreadsheet data. Use the following guidelines:
+
+Contextual Information: Link each metric explicitly to its broader context as described in the slide text. Ensure that metrics extracted from the spreadsheet are understood and interpreted within the slide's context.
+Hierarchical Organization: Structure the output in a hierarchical JSON format that nests metrics under descriptive and meaningful keys derived from the slide content (e.g., event name, region, or category). If a metric is tied to a specific year or range of years, include this in the JSON structure.
+Explicit Descriptions: For each metric, include:
 A descriptive key (metric_name) to provide clear identification of the metric (e.g., Total Revenue Premier League 2020/2021 or Total Revenue of the Big Five soccer leagues in Europe 2011/12 to 2022/23).
 The value as a numeric entry.
 For monetary values, include the currency key with the ISO 3-letter code (e.g., EUR for euros).
@@ -17,7 +43,7 @@ Output Format:
 Note: If a metric is not explicitly mentioned in the text or spreadsheet data, do not include it in the output. If a spreadsheet or table is provided, only extract metrics that are directly provided in the data, without summarizing or aggregating the data unless explicitly stated in the input.
 """
 
-"For non-monetary values, include a unit key describing the unit of measurement (e.g., people or percent)."
+# "For non-monetary values, include a unit key describing the unit of measurement (e.g., people or percent)."
 
 prompt_096 = """
 Please extract all relevant metrics from the provided slide content, including economic, social, environmental, and other metrics explicitly mentioned in the text and/or spreadsheet data. Use the following guidelines:
