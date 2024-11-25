@@ -12,6 +12,13 @@ from dotenv import load_dotenv
 import asyncio
 import metric_mapping
 
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 load_dotenv()
 client = OpenAI()
 app = FastAPI()
@@ -340,7 +347,9 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
         output_metrics_path = os.path.join(markdowns_dir, "processed_metrics.json")
 
         # Run metric mapping asynchronously without blocking the API response
-        asyncio.create_task(run_metric_mapping(input_json_path, output_metrics_path))
+        # asyncio.create_task(run_metric_mapping(input_json_path, output_metrics_path))
+        run_metric_mapping(input_json_path, output_metrics_path)
+        logger.info(f"Started metric mapping task for {input_json_path} to {output_metrics_path}")
 
         # Remove the temporary file
         os.remove(temp_file_path)
@@ -356,8 +365,12 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
             content={"message": f"Error processing PPTX: {str(e)}"}
         )
 
-async def run_metric_mapping(input_file: str, output_file: str):
-    await metric_mapping.process_json_file(input_file, output_file)
+def run_metric_mapping(input_file: str, output_file: str):
+    try:
+        metric_mapping.process_json_file(input_file, output_file)
+        logger.info(f"Metric mapping completed. Output written to {output_file}")
+    except Exception as e:
+        logger.error(f"Error in metric mapping: {str(e)}")
 
 @app.get("/metric_mapping_status")
 async def get_metric_mapping_status():
