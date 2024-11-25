@@ -9,6 +9,8 @@ from PIL import Image
 import xml.etree.ElementTree as ET
 from openai import OpenAI
 from dotenv import load_dotenv
+import asyncio
+import metric_mapping
 
 load_dotenv()
 client = OpenAI()
@@ -175,18 +177,10 @@ def generate_slide_json(content, slide_number):
         return json.loads(summary_json)
     except json.JSONDecodeError:
         print(f"Error decoding JSON for slide {slide_number}")
-        print(f"RAW SUMMARY: {summary_raw}")
+        # print(f"RAW SUMMARY: {summary_raw}")
         return None
 
 def process_pptx_to_json(presentation, markdowns_dir):
-    """
-    Process PowerPoint slides and generate JSON files
-    
-    Args:
-        presentation (Presentation): PowerPoint presentation object
-        markdowns_dir (str): Directory for markdown and JSON files
-        prompt (str): Extraction prompt
-    """
     # Combined markdown file path
     combined_markdown_path = os.path.join(markdowns_dir, "combined_slides.md")
     
@@ -225,121 +219,165 @@ def process_pptx_to_json(presentation, markdowns_dir):
 @app.post("/process_pptx/")
 async def process_pptx_content(pptx_file: UploadFile = File(...)):
     # Save the uploaded file temporarily
-    os.makedirs("/tmp", exist_ok=True)
-    temp_file_path = f"/tmp/{pptx_file.filename}"
-    with open(temp_file_path, "wb") as buffer:
-        buffer.write(await pptx_file.read())
-
-    # Process the PPTX file
-    extracted_dir = os.path.join(r"../extracted_content", "everything", pptx_file.filename.split('.')[0])
-    markdowns_dir = os.path.join(extracted_dir, "markdowns")
-    
-    # Create necessary directories
-    os.makedirs(markdowns_dir, exist_ok=True)
-    
-    # Extract PPTX contents
-    print(f"Extracting PPTX contents to {extracted_dir}...")
-    with zipfile.ZipFile(temp_file_path, 'r') as pptx:
-        pptx.extractall(extracted_dir)
-    
-    # Define important directories
-    slides_rels_dir = os.path.join(extracted_dir, 'ppt', 'slides', '_rels')
-    charts_rels_dir = os.path.join(extracted_dir, 'ppt', 'charts', '_rels')
-    embeddings_dir = os.path.join(extracted_dir, 'ppt', 'embeddings')
-    media_dir = os.path.join(extracted_dir, 'ppt', 'media')
-    
-    # Get slide-to-image and slide-to-excel mappings
-    slide_images = get_slide_image_mappings(slides_rels_dir)
-    slide_to_excel = get_chart_excel_mappings(slides_rels_dir, charts_rels_dir)
-    
-    # Load presentation
-    presentation = Presentation(temp_file_path)
-    
-    # Process each slide
-    for i, slide in enumerate(presentation.slides):
-        slide_number = i + 1
-        markdown_file_path = os.path.join(markdowns_dir, f"slide_{slide_number}.md")
-        
-        print(f"\nProcessing Slide {slide_number}")
-        
-        with open(markdown_file_path, "w", encoding='utf-8') as md_file:
-            # Write slide number
-            md_file.write(f"# Slide {slide_number}\n\n")
-            
-            # Extract and write text content
-            text_content = extract_text(slide)
-            md_file.write(f"## Text Content\n\n{text_content}\n\n")
-            
-            # Extract and write table content
-            tables = extract_tables(slide)
-            if tables:
-                md_file.write("## Tables\n\n")
-                for table_index, table in enumerate(tables):
-                    md_file.write(f"### Table {table_index + 1}\n\n")
-                    for row in table:
-                        md_file.write("| " + " | ".join(row) + " |\n")
-                    md_file.write("\n")
-            
-            # Process images
-            if str(slide_number) in slide_images:
-                md_file.write("## Images\n\n")
-                for img_file in slide_images[str(slide_number)]:
-                    img_path = os.path.join(media_dir, img_file)
-                    print(f"  Processing image: {img_file}")
-                    
-                    # Perform OCR
-                    ocr_text = ocr_image(img_path)
-                    
-                    md_file.write(f"### Image: {img_file}\n\n")
-                    if ocr_text:
-                        print(f"  OCR Text found in {img_file}")
-                        md_file.write(f"OCR Text:\n```\n{ocr_text}\n```\n\n")
-                    else:
-                        print(f"  No text found in {img_file}")
-                        # md_file.write("No text found in image\n\n")
-            
-            # Process Excel files
-            if str(slide_number) in slide_to_excel:
-                md_file.write("## Excel Data\n\n")
-                for excel_file in slide_to_excel[str(slide_number)]:
-                    excel_path = os.path.join(embeddings_dir, excel_file)
-                    if os.path.exists(excel_path):
-                        print(f"  Processing Excel file: {excel_file}")
-                        try:
-                            df = pd.read_excel(excel_path)
-                            md_file.write(f"### {excel_file}\n\n")
-                            md_file.write(df.to_markdown(index=False))
-                            md_file.write("\n\n")
-                        except Exception as e:
-                            print(f"  Error processing Excel file {excel_file}: {str(e)}")
-                            md_file.write(f"Error processing Excel file: {excel_file}\n\n")
-        
-        print(f"  Saved content to {markdown_file_path}")
-    # Combine all markdown files into a single file
-    combined_markdown_path = os.path.join(markdowns_dir, "combined_slides.md")
-    with open(combined_markdown_path, "w", encoding='utf-8') as combined_md_file:
-        for slide_number in range(1, len(presentation.slides) + 1):
-            markdown_file_path = os.path.join(markdowns_dir, f"slide_{slide_number}.md")
-            with open(markdown_file_path, "r", encoding='utf-8') as md_file:
-                combined_md_file.write(md_file.read())
-                combined_md_file.write("\n\n")  # Add some space between slides
-
-    print(f"Combined markdown file saved to {combined_markdown_path}")
-    with open(combined_markdown_path, "r", encoding='utf-8') as combined_md_file:
-        combined_content = combined_md_file.read()
-
-    # Send the content to the LLM for summarization
-    summary = summarize_content(combined_content)
-
-    # Save the summary to a markdown file
-    summary_file_path = os.path.join(markdowns_dir, "summary.md")
     try:
-        with open(summary_file_path, "w", encoding='utf-8') as summary_file:
-            summary_file.write("# Summary\n\n")
-            summary_file.write(summary)
-        print(f"Summary saved to {summary_file_path}")
+        os.makedirs("/tmp", exist_ok=True)
+        temp_file_path = f"/tmp/{pptx_file.filename}"
+        with open(temp_file_path, "wb") as buffer:
+            buffer.write(await pptx_file.read())
+
+        # Process the PPTX file
+        extracted_dir = os.path.join(r"../extracted_content", "everything", pptx_file.filename.split('.')[0])
+        markdowns_dir = os.path.join(extracted_dir, "markdowns")
+        
+        # Create necessary directories
+        os.makedirs(markdowns_dir, exist_ok=True)
+        
+        # Extract PPTX contents
+        print(f"Extracting PPTX contents to {extracted_dir}...")
+        with zipfile.ZipFile(temp_file_path, 'r') as pptx:
+            pptx.extractall(extracted_dir)
+        
+        # Define important directories
+        slides_rels_dir = os.path.join(extracted_dir, 'ppt', 'slides', '_rels')
+        charts_rels_dir = os.path.join(extracted_dir, 'ppt', 'charts', '_rels')
+        embeddings_dir = os.path.join(extracted_dir, 'ppt', 'embeddings')
+        media_dir = os.path.join(extracted_dir, 'ppt', 'media')
+        
+        # Get slide-to-image and slide-to-excel mappings
+        slide_images = get_slide_image_mappings(slides_rels_dir)
+        slide_to_excel = get_chart_excel_mappings(slides_rels_dir, charts_rels_dir)
+        
+        # Load presentation
+        presentation = Presentation(temp_file_path)
+        
+        # Process each slide
+        for i, slide in enumerate(presentation.slides):
+            slide_number = i + 1
+            markdown_file_path = os.path.join(markdowns_dir, f"slide_{slide_number}.md")
+            
+            print(f"\nProcessing Slide {slide_number}")
+            
+            with open(markdown_file_path, "w", encoding='utf-8') as md_file:
+                # Write slide number
+                md_file.write(f"# Slide {slide_number}\n\n")
+                
+                # Extract and write text content
+                text_content = extract_text(slide)
+                md_file.write(f"## Text Content\n\n{text_content}\n\n")
+                
+                # Extract and write table content
+                tables = extract_tables(slide)
+                if tables:
+                    md_file.write("## Tables\n\n")
+                    for table_index, table in enumerate(tables):
+                        md_file.write(f"### Table {table_index + 1}\n\n")
+                        for row in table:
+                            md_file.write("| " + " | ".join(row) + " |\n")
+                        md_file.write("\n")
+                
+                # Process images
+                if str(slide_number) in slide_images:
+                    md_file.write("## Images\n\n")
+                    for img_file in slide_images[str(slide_number)]:
+                        img_path = os.path.join(media_dir, img_file)
+                        print(f"  Processing image: {img_file}")
+                        
+                        # Perform OCR
+                        ocr_text = ocr_image(img_path)
+                        
+                        md_file.write(f"### Image: {img_file}\n\n")
+                        if ocr_text:
+                            print(f"  OCR Text found in {img_file}")
+                            md_file.write(f"OCR Text:\n```\n{ocr_text}\n```\n\n")
+                        else:
+                            print(f"  No text found in {img_file}")
+                            md_file.write("No text found in image\n\n")
+                
+                if str(slide_number) in slide_to_excel:
+                    md_file.write("## Excel Data\n\n")
+                    for excel_file in slide_to_excel[str(slide_number)]:
+                        excel_path = os.path.join(embeddings_dir, excel_file)
+                        if os.path.exists(excel_path):
+                            print(f"  Processing Excel file: {excel_file}")
+                            try:
+                                df = pd.read_excel(excel_path)
+                                md_file.write(f"### {excel_file}\n\n")
+                                md_file.write(df.to_markdown(index=False))
+                                md_file.write("\n\n")
+                            except Exception as e:
+                                print(f"  Error processing Excel file {excel_file}: {str(e)}")
+                                md_file.write(f"Error processing Excel file: {excel_file}: {str(e)} \n\n")
+            
+            print(f"  Saved content to {markdown_file_path}")
+        # Combine all markdown files into a single file
+        combined_markdown_path = os.path.join(markdowns_dir, "combined_slides.md")
+        with open(combined_markdown_path, "w", encoding='utf-8') as combined_md_file:
+            for slide_number in range(1, len(presentation.slides) + 1):
+                markdown_file_path = os.path.join(markdowns_dir, f"slide_{slide_number}.md")
+                with open(markdown_file_path, "r", encoding='utf-8') as md_file:
+                    combined_md_file.write(md_file.read())
+                    combined_md_file.write("\n\n")  # Add some space between slides
+
+        print(f"Combined markdown file saved to {combined_markdown_path}")
+        with open(combined_markdown_path, "r", encoding='utf-8') as combined_md_file:
+            combined_content = combined_md_file.read()
+
+        # Send the content to the LLM for summarization
+        summary = summarize_content(combined_content)
+
+        # Save the summary to a markdown file
+        summary_file_path = os.path.join(markdowns_dir, "summary.md")
+        try:
+            with open(summary_file_path, "w", encoding='utf-8') as summary_file:
+                summary_file.write("# Summary\n\n")
+                summary_file.write(summary)
+            print(f"Summary saved to {summary_file_path}")
+        except Exception as e:
+            print(f"Error saving summary: {str(e)}")
+        process_pptx_to_json(presentation, markdowns_dir)
+        # Define input and output file paths
+        input_json_path = os.path.join(markdowns_dir, "combined_slides_metrics.json")
+        output_metrics_path = os.path.join(markdowns_dir, "processed_metrics.json")
+
+        # Run metric mapping asynchronously without blocking the API response
+        asyncio.create_task(run_metric_mapping(input_json_path, output_metrics_path))
+
+        # Remove the temporary file
+        os.remove(temp_file_path)
+
+        return JSONResponse(content={
+            "message": "PPTX processed successfully", 
+            "metric_mapping_status": "Processing started in background"
+        })
+
     except Exception as e:
-        print(f"Error saving summary: {str(e)}")
-    process_pptx_to_json(presentation, markdowns_dir)
-    os.remove(temp_file_path)
-    return JSONResponse(content={"message": "PPTX processed successfully"})
+        return JSONResponse(
+            status_code=500, 
+            content={"message": f"Error processing PPTX: {str(e)}"}
+        )
+
+async def run_metric_mapping(input_file: str, output_file: str):
+    await metric_mapping.process_json_file(input_file, output_file)
+
+@app.get("/metric_mapping_status")
+async def get_metric_mapping_status():
+    """
+    Endpoint to check the status of metric mapping process
+    """
+    try:
+        # Check if processed_metrics.json exists
+        if os.path.exists("processed_metrics.json"):
+            return JSONResponse(content={
+                "status": "completed",
+                "file": "processed_metrics.json"
+            })
+        else:
+            return JSONResponse(content={
+                "status": "processing",
+                "message": "Metric mapping is in progress"
+            })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, 
+            content={"message": f"Error checking status: {str(e)}"}
+        )
