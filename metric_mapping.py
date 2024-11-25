@@ -160,8 +160,7 @@ async def process_json_file(input_file: str, output_file: str):
 # Run the async function
 if __name__ == "__main__":
     input_file = "combined_slides_metrics.json"
-    input_file = "../extracted_content/everything/slide/markdowns/combined_slides_metrics.json"
-    output_file = "../extracted_content/everything/slide/markdowns/processed_metrics.json"
-    # output_file = "processed_metrics.json"
-    
+    input_file = "../extracted_content/everything/slide2/markdowns/combined_slides_metrics.json"
+    output_file = "../extracted_content/everything/slide2/markdowns/processed_metrics.json"
+
     asyncio.run(process_json_file(input_file, output_file))
