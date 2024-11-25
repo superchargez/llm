@@ -177,6 +177,7 @@ def generate_slide_json(content, slide_number):
         return json.loads(summary_json)
     except json.JSONDecodeError:
         print(f"Error decoding JSON for slide {slide_number}")
+        print(f"RAW SUMMARY: {summary_raw}")
         return None
 
 def process_pptx_to_json(presentation, markdowns_dir):
@@ -314,7 +315,7 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
                                 md_file.write("\n\n")
                             except Exception as e:
                                 print(f"  Error processing Excel file {excel_file}: {str(e)}")
-                                md_file.write(f"Error processing Excel file: {excel_file}\n\n")
+                                md_file.write(f"Error processing Excel file: {excel_file}: {str(e)} \n\n")
             
             print(f"  Saved content to {markdown_file_path}")
         # Combine all markdown files into a single file
@@ -346,7 +347,6 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
         # Define input and output file paths
         input_json_path = os.path.join(markdowns_dir, "combined_slides_metrics.json")
         output_metrics_path = os.path.join(markdowns_dir, "processed_metrics.json")
-        # output_metrics_path = "processed_metrics.json"
 
         # Run metric mapping asynchronously without blocking the API response
         asyncio.create_task(run_metric_mapping(input_json_path, output_metrics_path))
