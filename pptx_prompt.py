@@ -1,6 +1,200 @@
 prompt = """
 Please extract all relevant metrics from the provided slide content, including economic, social, environmental, and other metrics explicitly mentioned in the text and/or spreadsheet data. Use the following guidelines:
 
+1. **Event-Based Organization**:
+   - Treat each year or distinct timeframe (e.g., "2008/09", "2009/10") as a separate event.
+   - For each event, include:
+     - A descriptive `event_name` that combines the main context (e.g., "German Bundesliga", "English Premier League") with the specific year or range of years (e.g., "2008/09", "2017").
+       - **Do not include any metric names (e.g., "Net Debt") in the `event_name`. Metrics belong in the `metrics` key.**
+     - An `event_date` field corresponding to the year or range of years.
+
+2. **Metrics Grouping**:
+   - For each event, group all relevant metrics under a `metrics` key.
+   - Each metric should include:
+     - A descriptive key (e.g., "Match Revenue from Ticket Sales", "Advertising Revenue from Sponsors").
+     - The numeric `value`.
+     - The `currency` key using the ISO 3-letter code (e.g., EUR for euros).
+
+3. **Enhanced Descriptive Metric Names**:
+   - Ensure that all metric names are unambiguous and self-explanatory.
+   - Avoid generic or vague names such as "Other" or "Advertising". Instead:
+     - Add contextual information to clarify the metric’s meaning (e.g., "Other Costs for Operations", "Advertising Revenue from Sponsors").
+     - When possible, include details from the input (e.g., category names, associated segments, or specific activities) to make the names meaningful.
+   - Example:
+     - Instead of "Youth, amateurs, academies", use "Costs for Youth, Amateur, and Academy Development".
+     - Instead of "Other", use "Other Costs for Match Operations" or "Other Revenue from Ancillary Services".
+
+4. **Comprehensive Extraction**:
+   - Extract metrics directly from both the slide text and the spreadsheet data, without inferring or calculating values not explicitly mentioned.
+   - Include all rows and columns of provided data, unless explicitly excluded in the input.
+
+5. **Table of Contents and Non-Metric Slides**:
+   - If the input content represents a table of contents, an agenda, or contains no explicit metrics, **exclude it from processing and output generation**.
+   - Identify these slides based on their lack of detailed data, their generic structure, or headings such as "Table of Contents", "Agenda", or "Overview".
+
+6. **Output Format**:
+   - The output should be a JSON array of events, where each event is a separate JSON object.
+   - Example:
+[
+  {
+    "event_name": "English Premier League 2017",
+    "event_date": "2017",
+    "metrics": {
+      "Net Debt of Premier League Clubs": {
+        "value": 1954,
+        "currency": "GBP"
+      },
+      "Net Debt of Championship Clubs": {
+        "value": 1812,
+        "currency": "GBP"
+      }
+    }
+  }
+]
+
+7. Validation: 
+Ensure metric names are consistent with their category (e.g., revenue, costs, operations).
+Verify that each metric name aligns with the broader context provided in the input.
+
+8. No Inference or Aggregation: Do not infer metrics or calculate totals. Only extract metrics as provided in the input.
+
+9. Adaptability:If the input mentions costs, revenues, or specific activities, integrate these details into the metric names to avoid ambiguity.
+
+Example: If the input includes "Advertising", clarify whether it refers to "Advertising Costs" or "Advertising Revenue" based on context.
+
+"""
+prompt_092 = """
+Please extract all relevant metrics from the provided slide content, including economic, social, environmental, and other metrics explicitly mentioned in the text and/or spreadsheet data. Use the following guidelines:
+
+1. **Event-Based Organization**:
+   - Treat each year or distinct timeframe (e.g., "2008/09", "2009/10") as a separate event.
+   - For each event, include:
+     - A descriptive `event_name` that combines the main context (e.g., "German Bundesliga") and the specific year or range of years (e.g., "2008/09").
+     - An `event_date` field corresponding to the year or range of years.
+
+2. **Metrics Grouping**:
+   - For each event, group all relevant metrics under a `metrics` key.
+   - Each metric should include:
+     - A descriptive key (e.g., "Match Revenue from Ticket Sales", "Advertising Revenue from Sponsors").
+     - The numeric `value`.
+     - The `currency` key using the ISO 3-letter code (e.g., EUR for euros).
+
+3. **Enhanced Descriptive Metric Names**:
+   - Ensure that all metric names are unambiguous and self-explanatory.
+   - Avoid generic or vague names such as "Other" or "Advertising". Instead:
+     - Add contextual information to clarify the metric’s meaning (e.g., "Other Costs for Operations", "Advertising Revenue from Sponsors").
+     - When possible, include details from the input (e.g., category names, associated segments, or specific activities) to make the names meaningful.
+   - Example:
+     - Instead of "Youth, amateurs, academies", use "Costs for Youth, Amateur, and Academy Development".
+     - Instead of "Other", use "Other Costs for Match Operations" or "Other Revenue from Ancillary Services".
+
+4. **Comprehensive Extraction**:
+   - Extract metrics directly from both the slide text and the spreadsheet data, without inferring or calculating values not explicitly mentioned.
+   - Include all rows and columns of provided data, unless explicitly excluded in the input.
+
+5. **Output Format**:
+   - The output should be a JSON array of events, where each event is a separate JSON object.
+   - Example:
+
+```json
+[
+  {
+    "event_name": "German Bundesliga 2008/09",
+    "event_date": "2008/09",
+    "metrics": {
+      "Match Revenue from Ticket Sales": {
+        "value": 363.4,
+        "currency": "EUR"
+      },
+      "Advertising Revenue from Sponsors": {
+        "value": 488.77,
+        "currency": "EUR"
+      },
+      "Other Revenue from Ancillary Services": {
+        "value": 164.24,
+        "currency": "EUR"
+      }
+    }
+  }
+]
+
+6. Validation: Ensure metric names are consistent with their category (e.g., revenue, costs, operations).
+Verify that each metric name aligns with the broader context provided in the input.
+
+7. No Inference or Aggregation: Do not infer metrics or calculate totals. Only extract metrics as provided in the input.
+
+8. Adaptability: If the input mentions costs, revenues, or specific activities, integrate these details into the metric names to avoid ambiguity.
+
+Example: If the input includes "Advertising", clarify whether it refers to "Advertising Costs" or "Advertising Revenue" based on context. """
+
+prompt_093 = """
+Please extract all relevant metrics from the provided slide content, including economic, social, environmental, and other metrics explicitly mentioned in the text and/or spreadsheet data. Use the following guidelines:
+
+1. **Event-Based Organization**:
+   - Treat each year or distinct timeframe (e.g., "2008/09", "2009/10") as a separate event.
+   - For each event, include:
+     - A descriptive `event_name` that combines the main context (e.g., "German Bundesliga") and the specific year or range of years (e.g., "2008/09").
+     - An `event_date` field corresponding to the year or range of years.
+
+2. **Metrics Grouping**:
+   - For each event, group all relevant metrics (e.g., revenue, advertising, transfers) under a `metrics` key.
+   - Each metric should include:
+     - A descriptive key (e.g., "Match Revenue", "Advertising Revenue").
+     - The numeric `value`.
+     - The `currency` key using the ISO 3-letter code (e.g., EUR for euros).
+
+3. **Comprehensive Extraction**:
+   - Extract metrics directly from both the slide text and the spreadsheet data, without inferring or calculating values not explicitly mentioned.
+   - Include all rows and columns of provided data, unless explicitly excluded in the input.
+
+4. **Output Format**:
+   - The output should be a JSON array of events, where each event is a separate JSON object.
+   - Example:
+   [
+  {
+    "event_name": "German Bundesliga 2008/09",
+    "event_date": "2008/09",
+    "metrics": {
+      "Match Revenue": {
+        "value": 363.4,
+        "currency": "EUR"
+      },
+      "Advertising Revenue": {
+        "value": 488.77,
+        "currency": "EUR"
+      }
+    }
+  },
+  {
+    "event_name": "German Bundesliga 2009/10",
+    "event_date": "2009/10",
+    "metrics": {
+      "Match Revenue": {
+        "value": 379.29,
+        "currency": "EUR"
+      },
+      "Advertising Revenue": {
+        "value": 511.89,
+        "currency": "EUR"
+      }
+    }
+  }
+]
+
+5. Naming Guidelines:
+
+event_name should combine the league or competition name and the specific year or range (e.g., "German Bundesliga 2008/09").
+Metric names should be concise but descriptive (e.g., "Match Revenue", "Advertising Revenue").
+
+6. No Inference or Aggregation:Do not infer metrics or calculate totals. Only extract metrics as provided in the input.
+
+7. Validation: Ensure that the output JSON structure is valid and correctly nested.
+
+If the input text or spreadsheet includes multiple contexts, ensure each context is treated as a separate event, and metrics are grouped accordingly. """
+
+prompt_094_metrics = """
+Please extract all relevant metrics from the provided slide content, including economic, social, environmental, and other metrics explicitly mentioned in the text and/or spreadsheet data. Use the following guidelines:
+
 Contextual Information: Link each metric explicitly to its broader context as described in the slide text. Ensure that metrics extracted from the spreadsheet are understood and interpreted within the slide's context.
 Hierarchical Organization: Structure the output in a hierarchical JSON format that nests metrics under descriptive and meaningful keys derived from the slide content (e.g., event name, region, or category). If a metric is tied to a specific year or range of years, include this in the JSON structure.
 Explicit Descriptions: For each metric, include:
