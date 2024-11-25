@@ -177,18 +177,10 @@ def generate_slide_json(content, slide_number):
         return json.loads(summary_json)
     except json.JSONDecodeError:
         print(f"Error decoding JSON for slide {slide_number}")
-        print(f"RAW SUMMARY: {summary_raw}")
+        # print(f"RAW SUMMARY: {summary_raw}")
         return None
 
 def process_pptx_to_json(presentation, markdowns_dir):
-    """
-    Process PowerPoint slides and generate JSON files
-    
-    Args:
-        presentation (Presentation): PowerPoint presentation object
-        markdowns_dir (str): Directory for markdown and JSON files
-        prompt (str): Extraction prompt
-    """
     # Combined markdown file path
     combined_markdown_path = os.path.join(markdowns_dir, "combined_slides.md")
     
@@ -299,9 +291,8 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
                             md_file.write(f"OCR Text:\n```\n{ocr_text}\n```\n\n")
                         else:
                             print(f"  No text found in {img_file}")
-                            # md_file.write("No text found in image\n\n")
+                            md_file.write("No text found in image\n\n")
                 
-                # Process Excel files
                 if str(slide_number) in slide_to_excel:
                     md_file.write("## Excel Data\n\n")
                     for excel_file in slide_to_excel[str(slide_number)]:
@@ -366,22 +357,8 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
         )
 
 async def run_metric_mapping(input_file: str, output_file: str):
-    """
-    Wrapper function to run metric mapping process 
-    This allows running the process in background without blocking API response
-    """
     await metric_mapping.process_json_file(input_file, output_file)
-    # try:
-    #     # Use the function from metric_mapping module
-    #     await metric_mapping.process_json_file(input_file, output_file)
-        
-    #     # Optional: Add logging or additional processing after metric mapping
-    #     logger.info(f"Metric mapping completed. Output saved to {output_file}")
 
-    # except Exception as e:
-    #     logger.error(f"Error in metric mapping: {str(e)}")
-
-# Optional: Add a background task monitor endpoint
 @app.get("/metric_mapping_status")
 async def get_metric_mapping_status():
     """
@@ -390,7 +367,6 @@ async def get_metric_mapping_status():
     try:
         # Check if processed_metrics.json exists
         if os.path.exists("processed_metrics.json"):
-            # You could add more sophisticated status tracking here
             return JSONResponse(content={
                 "status": "completed",
                 "file": "processed_metrics.json"
