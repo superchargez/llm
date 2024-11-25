@@ -175,6 +175,7 @@ def generate_slide_json(content, slide_number):
         return json.loads(summary_json)
     except json.JSONDecodeError:
         print(f"Error decoding JSON for slide {slide_number}")
+        print(f"RAW SUMMARY: {summary_raw}")
         return None
 
 def process_pptx_to_json(presentation, markdowns_dir):
