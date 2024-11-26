@@ -1,3 +1,4 @@
+from metric_mapping import process_json_file
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 import os, re, json
@@ -9,8 +10,13 @@ from PIL import Image
 import xml.etree.ElementTree as ET
 from openai import OpenAI
 from dotenv import load_dotenv
-import asyncio
-import metric_mapping
+
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 load_dotenv()
 client = OpenAI()
@@ -177,7 +183,7 @@ def generate_slide_json(content, slide_number):
         return json.loads(summary_json)
     except json.JSONDecodeError:
         print(f"Error decoding JSON for slide {slide_number}")
-        # print(f"RAW SUMMARY: {summary_raw}")
+        print(f"RAW SUMMARY: {summary_raw}")
         return None
 
 def process_pptx_to_json(presentation, markdowns_dir):
@@ -339,8 +345,17 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
         input_json_path = os.path.join(markdowns_dir, "combined_slides_metrics.json")
         output_metrics_path = os.path.join(markdowns_dir, "processed_metrics.json")
 
-        # Run metric mapping asynchronously without blocking the API response
-        asyncio.create_task(run_metric_mapping(input_json_path, output_metrics_path))
+        logger.info(f"Attempting to start metric mapping")
+        logger.info(f"Input JSON path: {input_json_path}")
+        logger.info(f"Output metrics path: {output_metrics_path}")
+
+        try:
+            # Directly await the async function instead of using create_task
+            await process_json_file(input_json_path, output_metrics_path)
+            logger.info(f"Metric mapping completed successfully")
+        except Exception as e:
+            logger.error(f"Error in metric mapping: {str(e)}")
+            logger.error(f"Full traceback:", exc_info=True)
 
         # Remove the temporary file
         os.remove(temp_file_path)
@@ -357,7 +372,11 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
         )
 
 async def run_metric_mapping(input_file: str, output_file: str):
-    await metric_mapping.process_json_file(input_file, output_file)
+    try:
+        await process_json_file(input_file, output_file)
+        logger.info(f"Metric mapping completed. Output written to {output_file}")
+    except Exception as e:
+        logger.error(f"Error in metric mapping: {str(e)}")
 
 @app.get("/metric_mapping_status")
 async def get_metric_mapping_status():

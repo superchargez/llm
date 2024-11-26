@@ -128,12 +128,12 @@ async def process_json_file(input_file: str, output_file: str):
         # Read input JSON file
         with open(input_file, 'r') as f:
             data = json.load(f)
-        
+
         results = []
-        
+
         async with aiohttp.ClientSession() as session:
             tasks = []
-            
+
             # Process each slide
             for slide_data in data['slides'].values():
                 for event in slide_data:
@@ -141,13 +141,13 @@ async def process_json_file(input_file: str, output_file: str):
                     for metric_name, metric_data in event['metrics'].items():
                         task = process_metric(session, event, metric_name, metric_data)
                         tasks.append(task)
-            
+
             # Wait for all tasks to complete
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Filter out any errors
             results = [r for r in results if isinstance(r, dict)]
-        
+
         # Write results to output file
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=2)
