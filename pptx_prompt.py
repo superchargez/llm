@@ -13,7 +13,8 @@ Please extract all relevant metrics from the provided slide content, including e
    - Each metric should include:
      - A descriptive key (e.g., "Match Revenue from Ticket Sales", "Advertising Revenue from Sponsors").
      - The numeric `value`.
-     - The `currency` key using the ISO 3-letter code (e.g., EUR for euros).
+     - The `currency` key using the ISO 3-letter code (e.g., EUR for euros). (Optional)
+  - NOTE: It is important to skip currency field/key if it not a currency or does not make sense to represent a value by currency symbol, for example in case of number of people or percent of some other value.
 
 3. **Enhanced Descriptive Metric Names**:
    - Ensure that all metric names are unambiguous and self-explanatory.
