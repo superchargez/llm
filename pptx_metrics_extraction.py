@@ -1,4 +1,4 @@
-from metric_mapping import process_json_file
+from pptx_metric_mapping import process_json_file
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 import os, re, json
