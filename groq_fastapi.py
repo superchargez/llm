@@ -4,7 +4,7 @@ from groq import Groq
 
 app = FastAPI()
 client = Groq()
-model = "llama-3.1-70b-versatile"
+model = "llama-3.3-70b-versatile"
 
 class Message(BaseModel):
     role: str
