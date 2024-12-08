@@ -10,7 +10,6 @@ from PIL import Image
 import xml.etree.ElementTree as ET
 from openai import OpenAI
 from dotenv import load_dotenv
-import asyncio
 
 import logging
 
@@ -350,13 +349,6 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
         logger.info(f"Input JSON path: {input_json_path}")
         logger.info(f"Output metrics path: {output_metrics_path}")
 
-        # Run metric mapping asynchronously without blocking the API response
-        # asyncio.create_task(run_metric_mapping(input_json_path, output_metrics_path))
-        # asyncio.create_task(process_json_file(input_json_path, output_metrics_path))
-        # run_metric_mapping(input_json_path, output_metrics_path)
-        # asyncio.run(run_metric_mapping(input_json_path, output_metrics_path))
-        # logger.info(f"Started metric mapping task for {input_json_path} to {output_metrics_path}")
-
         try:
             # Directly await the async function instead of using create_task
             await process_json_file(input_json_path, output_metrics_path)
@@ -378,13 +370,6 @@ async def process_pptx_content(pptx_file: UploadFile = File(...)):
             status_code=500, 
             content={"message": f"Error processing PPTX: {str(e)}"}
         )
-
-# def run_metric_mapping(input_file: str, output_file: str):
-#     try:
-#         metric_mapping.process_json_file(input_file, output_file)
-#         logger.info(f"Metric mapping completed. Output written to {output_file}")
-#     except Exception as e:
-#         logger.error(f"Error in metric mapping: {str(e)}")
 
 async def run_metric_mapping(input_file: str, output_file: str):
     try:
