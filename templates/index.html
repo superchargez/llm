@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced File Content Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        label { display: block; margin-bottom: 10px; }
+        input[type="text"] { width: 100%; height: 30px; margin-bottom: 15px; }
+        button { width: 150px; height: 40px; margin-top: 10px; }
+        #result { background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-top: 20px; }
+        #loading { display: none; color: blue; }
+        .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 45px; }
+        .markdown-body pre { background-color: #f5f5f5; border-radius: 3px; font-size: 85%; line-height: 1.45; overflow: auto; padding: 16px; }
+        .markdown-body pre code { display: block; padding: 0; word-wrap: normal; white-space: pre; background: transparent; border: 0; }
+        .markdown-body table th { font-weight: bold; }
+        .markdown-body table th, .markdown-body table td { padding: 6px 13px; border: 1px solid #ddd; }
+        .markdown-body table tr:nth-child(2n) td { background-color: #f6f8fa; }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.6.0/styles/github.min.css">
+</head>
+<body>
+    <h1>Enhanced File Content Viewer</h1>
+    
+    <label for="fileType">Select File Type:</label>
+    <select id="fileType">
+        <option value="json">JSON</option>
+        <option value="markdowns">Markdown</option>
+        <option value="analysis">Analysis</option>
+        <option value="mappings">Mappings</option>
+    </select>
+
+    <label for="idInput">Enter ID:</label>
+    <input type="text" id="idInput">
+
+    <button onclick="fetchContent()">Fetch Content</button>
+
+    <div id="loading">Loading...</div>
+
+    <div id="result"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.6.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.6.0/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
+    <script>
+        const fileTypeSelect = document.getElementById('fileType');
+        const idInput = document.getElementById('idInput');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+
+        async function fetchContent() {
+            const fileType = fileTypeSelect.value;
+            const id = idInput.value.trim();
+
+            if (!id) {
+                alert('Please enter an ID');
+                return;
+            }
+
+            toggleLoading(true);
+
+            try {
+                const response = await fetch(`/show/${fileType}/${id}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                let data;
+                if (fileType === 'json' || fileType === 'analysis' || fileType === 'mappings') {
+                    data = await response.json();
+                    resultDiv.innerHTML = `<pre><code class="javascript">${JSON.stringify(data, null, 2)}</code></pre>`;
+                    hljs.highlightBlock(resultDiv.querySelector('code'));
+                } else {
+                    data = await response.text();
+                    const converter = new showdown.Converter({ tables: true });
+                    resultDiv.innerHTML = `<div class="markdown-body">${converter.makeHtml(data)}</div>`;
+                }
+
+                toggleLoading(false);
+            } catch (error) {
+                toggleLoading(false);
+                resultDiv.innerText = `Error: ${error.message}`;
+            }
+        }
+
+        function toggleLoading(isLoading) {
+            if (isLoading) {
+                loadingDiv.style.display = 'block';
+                resultDiv.style.display = 'none';
+            } else {
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+            }
+        }
+
+        hljs.initHighlightingOnLoad();
+    </script>
+</body>
+</html>
