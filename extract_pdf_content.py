@@ -4,10 +4,8 @@ from typing import Dict, Any, List, Optional
 import re
 import json
 import base64
-
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.responses import JSONResponse
-# import fitz  # PyMuPDF
 import subprocess
 import mimetypes
 from hosting_deal_prompt import prompt_pdf
@@ -41,32 +39,74 @@ class ProcessResponse(BaseModel):
     response_data: List[Dict[str, Any]]
     usage_metadata: Optional[UsageMetadata] = None
 
-
 def convert_office_to_pdf(input_file: str) -> str:
-    """Converts DOCX/PPTX to PDF using unoconv."""
+    """Converts DOCX/PPTX to PDF using soffice (LibreOffice)."""
     mime_type, _ = mimetypes.guess_type(input_file)
 
     if mime_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                        'application/vnd.openxmlformats-officedocument.presentationml.presentation']: # docx or pptx
         try:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf_file: # delete=False to return path
-                pdf_output_path = temp_pdf_file.name
+            # Create a temporary directory explicitly in /tmp
+            temp_dir = tempfile.mkdtemp(dir='/tmp')
+            base_filename = os.path.basename(input_file)
+            pdf_filename_base = os.path.splitext(base_filename)[0]
+            pdf_filename = pdf_filename_base + ".pdf"
+            pdf_output_path_full = os.path.join(temp_dir, pdf_filename) # Full explicit output path
 
-                # Use unoconv to convert to PDF
-                command = ['unoconv', '--format', 'pdf', '--output', pdf_output_path, input_file]
-                process = subprocess.run(command, capture_output=True, text=True, check=True)
-                if process.returncode != 0:
-                    raise Exception(f"Unoconv failed: {process.stderr}")
-                return pdf_output_path
+            # Construct the soffice command - Explicit output path now
+            command = [
+                'soffice',
+                '--headless',
+                '--convert-to', 'pdf:writer_pdf_Export', # Explicitly use writer_pdf_Export filter for better PDF compatibility
+                '--outdir', temp_dir, # Still use outdir for output location context, but full path is given as input file
+                input_file, # Input file remains
+            ]
+            print(f"Soffice command: {command}")
+
+            process = subprocess.run(command, capture_output=True, text=True) # Remove check=True temporarily to inspect output even on error
+            stdout_output = process.stdout
+            stderr_output = process.stderr
+            return_code = process.returncode
+
+            print(f"Soffice Return Code: {return_code}")
+            print(f"Soffice stdout:\n{stdout_output}")
+            print(f"Soffice stderr:\n{stderr_output}")
+
+
+            if return_code != 0: # Check return code explicitly now
+                error_msg = f"Soffice failed with code {return_code}. Stderr: {stderr_output}"
+                raise Exception(error_msg)
+
+
+            # --- DEBUGGING: List directory contents after soffice ---
+            print(f"Contents of temp directory '{temp_dir}':")
+            for item in os.listdir(temp_dir):
+                print(f"- {item}")
+            # --- END DEBUGGING ---
+
+            # --- Find the actual PDF file created by soffice ---
+            actual_pdf_filename = None
+            for item in os.listdir(temp_dir):
+                if item.lower().endswith(".pdf"):
+                    actual_pdf_filename = item
+                    break
+
+            if actual_pdf_filename:
+                actual_pdf_output_path = os.path.join(temp_dir, actual_pdf_filename)
+                print(f"Actual PDF output path found: {actual_pdf_output_path}")
+                return actual_pdf_output_path
+            else:
+                raise Exception("Could not find the converted PDF file in the output directory after soffice execution.")
+
 
         except FileNotFoundError:
-            raise HTTPException(status_code=500, detail="unoconv not found. Please ensure it is installed and in your PATH.")
-        except subprocess.CalledProcessError as e:
-            raise HTTPException(status_code=400, detail=f"Error converting to PDF using unoconv: {e.stderr}")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error converting docx/pptx to PDF: {e}")
-    return input_file # Return original path if not docx/pptx
-
+            raise HTTPException(status_code=500, detail="soffice not found. Please ensure LibreOffice is installed and in your PATH.")
+        except Exception as e: # Catch general exceptions now as we removed subprocess.CalledProcessError check
+            detail_message = f"Error converting docx/pptx to PDF using soffice: {e}"
+            if 'error_msg' in locals():
+                detail_message += f"\nSoffice Error: {error_msg}"
+            raise HTTPException(status_code=400, detail=detail_message)
+    return input_file
 
 def parse_json_response(text: str) -> List[Dict[str, Any]]:
     """Parses JSON response from Gemini, handling potential format issues."""
@@ -140,13 +180,24 @@ async def process_prompt_with_text(file_content: bytes, file_mime_type: str) -> 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing prompt with Gemini: {e}")
 
-
-
 @app.post("/process-sports-deal/")
 async def process_sports_deal(file: UploadFile = File(...)):
     """Endpoint to process uploaded files for sports hosting deals."""
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as tmp_file: # Keep original filename suffix
+        original_filename = file.filename or "uploaded_file" # Fallback filename
+        file_extension = os.path.splitext(original_filename)[1] # Extract extension, including the dot
+
+        if not file_extension: # If no extension, try to guess from mime type (less reliable)
+            file_extension = mimetypes.guess_extension(file.content_type) or ""
+            if file_extension:
+                original_filename += file_extension # Append the guessed extension to filename
+
+        # Ensure extension starts with a dot (if it exists)
+        if file_extension and not file_extension.startswith('.'):
+            file_extension = '.' + file_extension
+
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file: # Use explicit extension
             contents = await file.read()
             tmp_file.write(contents)
             temp_file_path = tmp_file.name
@@ -177,7 +228,6 @@ async def process_sports_deal(file: UploadFile = File(...)):
         raise http_exc
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Internal server error: {str(e)}"})
-
 
 # if __name__ == "__main__":
 #     import uvicorn
