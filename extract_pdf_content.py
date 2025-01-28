@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 import re
 import json
 import base64
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 import subprocess
 import mimetypes
@@ -63,7 +63,7 @@ def convert_office_to_pdf(input_file: str) -> str:
             ]
             print(f"Soffice command: {command}")
 
-            process = subprocess.run(command, capture_output=True, text=True) # Remove check=True temporarily to inspect output even on error
+            process = subprocess.run(command, capture_output=True, text=True)
             stdout_output = process.stdout
             stderr_output = process.stderr
             return_code = process.returncode
@@ -76,13 +76,6 @@ def convert_office_to_pdf(input_file: str) -> str:
             if return_code != 0: # Check return code explicitly now
                 error_msg = f"Soffice failed with code {return_code}. Stderr: {stderr_output}"
                 raise Exception(error_msg)
-
-
-            # --- DEBUGGING: List directory contents after soffice ---
-            print(f"Contents of temp directory '{temp_dir}':")
-            for item in os.listdir(temp_dir):
-                print(f"- {item}")
-            # --- END DEBUGGING ---
 
             # --- Find the actual PDF file created by soffice ---
             actual_pdf_filename = None
@@ -162,7 +155,6 @@ async def process_prompt_with_text(file_content: bytes, file_mime_type: str) -> 
             print(f"Raw Gemini Response: {response.text}")
             parsed_response = {"error": "JSON Parsing Error", "raw_response": response.text}
 
-
         usage_metadata = None
         if hasattr(response, 'usage_metadata'):
             usage_metadata = {
@@ -228,7 +220,3 @@ async def process_sports_deal(file: UploadFile = File(...)):
         raise http_exc
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Internal server error: {str(e)}"})
-
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
