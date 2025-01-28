@@ -7,10 +7,10 @@ import base64
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.responses import JSONResponse
-import fitz  # PyMuPDF
+# import fitz  # PyMuPDF
 import subprocess
 import mimetypes
-from hosting_deal_prompt import prompt_pdf  # Import the prompt from your file
+from hosting_deal_prompt import prompt_pdf
 import google.generativeai as genai
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -21,7 +21,7 @@ app = FastAPI()
 dotenv_path = os.path.expanduser("~/.env")
 load_dotenv(dotenv_path)
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+API_KEY = os.getenv("mtp_GEMINI_KEY")
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables. Please set GEMINI_API_KEY in your ~/.env file.")
 
