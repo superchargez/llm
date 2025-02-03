@@ -4,11 +4,10 @@ from typing import Dict, Any, List, Optional
 import re
 import json
 import base64
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import subprocess
 import mimetypes
-from hosting_deal_prompt import prompt_pdf
 import google.generativeai as genai
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -63,7 +62,7 @@ def convert_office_to_pdf(input_file: str) -> str:
             ]
             print(f"Soffice command: {command}")
 
-            process = subprocess.run(command, capture_output=True, text=True)
+            process = subprocess.run(command, capture_output=True, text=True) # Remove check=True temporarily to inspect output even on error
             stdout_output = process.stdout
             stderr_output = process.stderr
             return_code = process.returncode
@@ -105,7 +104,7 @@ def parse_json_response(text: str) -> List[Dict[str, Any]]:
     """Parses JSON response from Gemini, handling potential format issues."""
     try:
         cleaned_text = re.sub(r'```json\s*|\s*```', '', text.strip())
-        # cleaned_text = cleaned_text.replace("'", '"') # since LLM is not producing JSON with single quotes, this line is commented out
+        # cleaned_text = cleaned_text.replace("'", '"') # since LLM is not producing output with single quote, remove this line
         parsed_data = json.loads(cleaned_text)
         if not isinstance(parsed_data, list):
             if isinstance(parsed_data, dict):
@@ -124,36 +123,73 @@ def parse_json_response(text: str) -> List[Dict[str, Any]]:
             detail=f"Error processing response: {str(e)}"
         )
 
+def load_prompt_from_markdown(filepath):
+    """Reads a Markdown file and returns its content as a string."""
+    with open(filepath, 'r', encoding='utf-8') as f:  # 'r' for read, encoding for potential special characters
+        prompt_markdown = f.read()
+    return prompt_markdown
 
 async def process_prompt_with_text(file_content: bytes, file_mime_type: str) -> Dict[str, Any]:
-    """Processes the file content (PDF or image) with the sports event hosting deal prompt using Gemini."""
     try:
-        prompt_content = prompt_pdf.replace("${content}", "Analyze the attached document.") # Generic prompt
-
+        # Load the prompt template
+        prompt_markdown = load_prompt_from_markdown("sponsorship_prompt.md")
+        
+        # Encode the file content
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
+        
+        # Create the full prompt by replacing the placeholder
+        prompt_with_content = prompt_markdown.replace("{document_content}", encoded_content)
+        
+        # Prepare content parts with proper mime types
         content_parts = []
-        if file_mime_type == 'application/pdf':
-            content_parts.append({'mime_type': 'application/pdf', 'data': base64.b64encode(file_content).decode('utf-8')})
-        elif file_mime_type.startswith('image/'): # Handle direct image uploads as well
-            content_parts.append({'mime_type': file_mime_type, 'data': base64.b64encode(file_content).decode('utf-8')})
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file type for direct processing. Please upload PDF or Image.")
-        content_parts.append(prompt_content)
-
-
-        response = gemini_model.generate_content(content_parts)
+        content_parts.append({'mime_type': file_mime_type, 'data': encoded_content})
+        content_parts.append(prompt_with_content)
+        response = None # Initialize response to None
+        try:
+            # Check if gemini_model is defined before using it
+            if 'gemini_model' not in locals() and 'gemini_model' not in globals():
+                raise NameError("gemini_model is not defined. Make sure you have imported and initialized it correctly.")
+            response = gemini_model.generate_content(content_parts)
+        except NameError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error calling Gemini model: {e}")
 
         parsed_response = {} # Initialize as empty dict in case of non-JSON response
         try:
+            if 'parse_json_response' not in locals() and 'parse_json_response' not in globals():
+                raise NameError("parse_json_response is not defined. Make sure you have imported or defined it correctly.")
             parsed_response = parse_json_response(response.text)
             if parsed_response and isinstance(parsed_response, list) and len(parsed_response) > 0:
                 parsed_response = parsed_response[0] # Take the first element if it's a list of dicts
             elif not parsed_response: # Handle empty list case
-                parsed_response = {"isHostingDeal": False, "dateOfAnnouncement": None, "places": None, "events": None, "status": None}
+                # Default response structure for sponsorship deals, adjust as needed based on your prompt's expected output
+                parsed_response = {
+                    "isSponsorshipDeal": False,
+                    "sellerOrganizations": None,
+                    "buyerOrganizations": None,
+                    "teams": None,
+                    "events": None,
+                    "athletes": None,
+                    "venues": None,
+                    "places": None,
+                    "type": None,
+                    "startDate": None,
+                    "endDate": None,
+                    "valueType": None,
+                    "valueAnnualised": None,
+                    "valueTotal": None,
+                    "currency": None,
+                    "dateOfAnnouncement": None
+                }
 
         except HTTPException as e: # Catch JSON parsing errors and return raw text for debugging
             print(f"JSON Parsing Error: {e.detail}")
             print(f"Raw Gemini Response: {response.text}")
             parsed_response = {"error": "JSON Parsing Error", "raw_response": response.text}
+        except NameError as e:
+             raise HTTPException(status_code=500, detail=str(e))
+
 
         usage_metadata = None
         if hasattr(response, 'usage_metadata'):
@@ -220,3 +256,8 @@ async def process_sports_deal(file: UploadFile = File(...)):
         raise http_exc
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Internal server error: {str(e)}"})
+
+@app.get("/")
+async def read_root():
+    """Endpoint to read the root of the application."""
+    return JSONResponse(content={"message": "port 8082 is working"})

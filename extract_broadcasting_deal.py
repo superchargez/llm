@@ -4,18 +4,17 @@ from typing import Dict, Any, List, Optional
 import re
 import json
 import base64
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import subprocess
 import mimetypes
-from hosting_deal_prompt import prompt_pdf
 import google.generativeai as genai
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
 app = FastAPI()
 
-# --- Gemini Setup (moved to global scope for reuse) ---
+# --- Gemini Setup ---
 dotenv_path = os.path.expanduser("~/.env")
 load_dotenv(dotenv_path)
 
@@ -26,7 +25,7 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 gemini_model = genai.GenerativeModel("gemini-1.5-flash") # Initialize Gemini model globally
 
-# --- Pydantic Models (moved to global scope for clarity) ---
+# --- Pydantic Models ---
 class UsageMetadata(BaseModel):
     prompt_token_count: int
     total_token_count: int
@@ -105,7 +104,7 @@ def parse_json_response(text: str) -> List[Dict[str, Any]]:
     """Parses JSON response from Gemini, handling potential format issues."""
     try:
         cleaned_text = re.sub(r'```json\s*|\s*```', '', text.strip())
-        # cleaned_text = cleaned_text.replace("'", '"') # since LLM is not producing JSON with single quotes, this line is commented out
+        # cleaned_text = cleaned_text.replace("'", '"') # LLM is not using single quote in responses anymore.
         parsed_data = json.loads(cleaned_text)
         if not isinstance(parsed_data, list):
             if isinstance(parsed_data, dict):
@@ -124,36 +123,74 @@ def parse_json_response(text: str) -> List[Dict[str, Any]]:
             detail=f"Error processing response: {str(e)}"
         )
 
+def load_prompt_from_markdown(filepath):
+    """Reads a Markdown file and returns its content as a string."""
+    with open(filepath, 'r', encoding='utf-8') as f:  # 'r' for read, encoding for potential special characters
+        prompt_markdown = f.read()
+    return prompt_markdown
 
 async def process_prompt_with_text(file_content: bytes, file_mime_type: str) -> Dict[str, Any]:
-    """Processes the file content (PDF or image) with the sports event hosting deal prompt using Gemini."""
     try:
-        prompt_content = prompt_pdf.replace("${content}", "Analyze the attached document.") # Generic prompt
+        # Load the prompt template
+        prompt_markdown = load_prompt_from_markdown("broadcast_deal_prompt.md") # Make sure this is BROADCAST prompt
+        # prompt_with_content = prompt_markdown.replace("{content}", base64.b64encode(file_content).decode('utf-8')) # Use {content} as per broadcast prompt
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
 
-        content_parts = []
-        if file_mime_type == 'application/pdf':
-            content_parts.append({'mime_type': 'application/pdf', 'data': base64.b64encode(file_content).decode('utf-8')})
-        elif file_mime_type.startswith('image/'): # Handle direct image uploads as well
-            content_parts.append({'mime_type': file_mime_type, 'data': base64.b64encode(file_content).decode('utf-8')})
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file type for direct processing. Please upload PDF or Image.")
-        content_parts.append(prompt_content)
+        # Prepare content parts - Correctly format for Gemini API
+        content_parts = [
+            {
+                "parts": [
+                    {  # File content part
+                        "mime_type": file_mime_type,
+                        # "data": base64.b64encode(file_content).decode('utf-8') # Keep base64 encoding for file data
+                        "data": encoded_content
+                    },
+                    {   # Text prompt part
+                        # "text": prompt_with_content
+                        "text": prompt_markdown
+                    }
+                ]
+            }
+        ]
 
+        response = None
+        try:
+            response = gemini_model.generate_content(
+                contents=content_parts,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=2048
+                )
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error calling Gemini model: {e}")
 
-        response = gemini_model.generate_content(content_parts)
-
-        parsed_response = {} # Initialize as empty dict in case of non-JSON response
+        parsed_response = {}
         try:
             parsed_response = parse_json_response(response.text)
             if parsed_response and isinstance(parsed_response, list) and len(parsed_response) > 0:
                 parsed_response = parsed_response[0] # Take the first element if it's a list of dicts
-            elif not parsed_response: # Handle empty list case
-                parsed_response = {"isHostingDeal": False, "dateOfAnnouncement": None, "places": None, "events": None, "status": None}
+            elif not parsed_response: # Handle empty list case -  BROADCAST DEAL DEFAULT RESPONSE
+                parsed_response = {
+                    "isBroadcastDeal": False, # Changed key to isBroadcastDeal
+                    "sellerOrganizations": None, # Correct keys for broadcast deal
+                    "buyerOrganizations": None, # Correct keys for broadcast deal
+                    "events": None,         # Correct keys for broadcast deal
+                    "places": None,         # Correct keys for broadcast deal
+                    "type": None,           # Correct keys for broadcast deal
+                    "startDate": None,      # Correct keys for broadcast deal
+                    "endDate": None,        # Correct keys for broadcast deal
+                    "valueType": None,      # Correct keys for broadcast deal
+                    "valueAnnualised": None, # Correct keys for broadcast deal
+                    "valueTotal": None,     # Correct keys for broadcast deal
+                    "currency": None,       # Correct keys for broadcast deal
+                    "dateOfAnnouncement": None # Correct keys for broadcast deal
+                }
 
         except HTTPException as e: # Catch JSON parsing errors and return raw text for debugging
             print(f"JSON Parsing Error: {e.detail}")
             print(f"Raw Gemini Response: {response.text}")
             parsed_response = {"error": "JSON Parsing Error", "raw_response": response.text}
+
 
         usage_metadata = None
         if hasattr(response, 'usage_metadata'):
@@ -172,51 +209,53 @@ async def process_prompt_with_text(file_content: bytes, file_mime_type: str) -> 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing prompt with Gemini: {e}")
 
-@app.post("/process-sports-deal/")
-async def process_sports_deal(file: UploadFile = File(...)):
-    """Endpoint to process uploaded files for sports hosting deals."""
+@app.post("/process-broadcast-deal/") # Changed endpoint path to be more specific to broadcast deal
+async def process_sports_deal(file: UploadFile = File(...)): # Function name can remain generic if you like, or rename to process_broadcast_deal
+    """Endpoint to process uploaded files for broadcast deals.""" # Updated docstring
     try:
-        original_filename = file.filename or "uploaded_file" # Fallback filename
-        file_extension = os.path.splitext(original_filename)[1] # Extract extension, including the dot
+        original_filename = file.filename or "uploaded_file"
+        file_extension = os.path.splitext(original_filename)[1]
 
-        if not file_extension: # If no extension, try to guess from mime type (less reliable)
+        if not file_extension:
             file_extension = mimetypes.guess_extension(file.content_type) or ""
             if file_extension:
-                original_filename += file_extension # Append the guessed extension to filename
+                original_filename += file_extension
 
-        # Ensure extension starts with a dot (if it exists)
         if file_extension and not file_extension.startswith('.'):
             file_extension = '.' + file_extension
 
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file: # Use explicit extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
             contents = await file.read()
             tmp_file.write(contents)
             temp_file_path = tmp_file.name
 
         file_mime_type = file.content_type
 
-        # Convert DOCX/PPTX to PDF if necessary
         pdf_file_path = convert_office_to_pdf(temp_file_path)
 
-        # Read file content (now PDF content if conversion happened, or original content if it was already PDF or image)
         with open(pdf_file_path, 'rb') as f:
             file_content = f.read()
 
-        # Determine the mime type to send to Gemini (always PDF after conversion, or original if image/pdf)
         gemini_mime_type = 'application/pdf' if pdf_file_path != temp_file_path else file_mime_type
 
 
-        prompt_result = await process_prompt_with_text(file_content, gemini_mime_type) # Send PDF content and mime type
+        prompt_result = await process_prompt_with_text(file_content, gemini_mime_type)
 
-        os.unlink(temp_file_path) # Delete original temp file
-        if pdf_file_path != temp_file_path: # Delete converted PDF if conversion happened
+        os.unlink(temp_file_path)
+        if pdf_file_path != temp_file_path:
             os.unlink(pdf_file_path)
 
 
-        return JSONResponse(content=prompt_result)
+        # Return BROADCAST DEAL related information in the response
+        return JSONResponse(content=prompt_result) # Ensure prompt_result contains broadcast deal info
 
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Internal server error: {str(e)}"})
+
+@app.get("/")
+async def read_root():
+    """Endpoint to read the root of the application."""
+    return JSONResponse(content={"message": "port 8081 is working for broadcasting deal"})
