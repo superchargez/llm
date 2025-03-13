@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bouncing Ball in Rotating Polygon</title>
+    <style>
+        canvas {
+            border: 2px solid #333;
+            background: #111;
+        }
+        .controls {
+            margin: 20px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        body {
+            background: #222;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="slider-container">
+            Sides: <input type="range" id="sides" min="3" max="10" value="4" step="1">
+            <span id="sidesValue">4</span>
+        </div>
+        <div class="slider-container">
+            Gravity: <input type="range" id="gravity" min="0" max="1" step="0.1" value="0.5">
+            <span id="gravityValue">0.5</span>
+        </div>
+        <div class="slider-container">
+            Bounciness: <input type="range" id="bounciness" min="0" max="1" step="0.1" value="0.8">
+            <span id="bouncinessValue">0.8</span>
+        </div>
+        <div class="slider-container">
+            Weight: <input type="range" id="weight" min="1" max="10" step="1" value="5">
+            <span id="weightValue">5</span>
+        </div>
+    </div>
+    <canvas id="canvas" width="600" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Ball properties
+        const ball = {
+            x: centerX,
+            y: centerY,
+            vx: 2,
+            vy: 0,
+            radius: 12,
+            color: '#00FF00'
+        };
+        
+        // Polygon properties
+        let rotationAngle = 0;
+        const rotationSpeed = 0.02;
+        let polygonSides = 4;
+        let vertices = [];
+        let shapeColor = '#FF0000';
+        let shapeGlowColor = '#FF0000';
+        let ballGlowColor = '#00FF00';
+
+        // Slider elements
+        const sidesSlider = document.getElementById('sides');
+        const gravitySlider = document.getElementById('gravity');
+        const bouncinessSlider = document.getElementById('bounciness');
+        const weightSlider = document.getElementById('weight');
+        const sidesValue = document.getElementById('sidesValue');
+        const gravityValue = document.getElementById('gravityValue');
+        const bouncinessValue = document.getElementById('bouncinessValue');
+        const weightValue = document.getElementById('weightValue');
+
+        // Initialize polygon vertices
+        function initPolygon() {
+            vertices = [];
+            const radius = Math.min(canvas.width, canvas.height) * 0.4;
+            for (let i = 0; i < polygonSides; i++) {
+                const angle = (i * 2 * Math.PI) / polygonSides + Math.PI/2;
+                vertices.push({
+                    x: centerX + radius * Math.cos(angle),
+                    y: centerY + radius * Math.sin(angle)
+                });
+            }
+        }
+
+        // Update polygon rotation
+        function updatePolygon() {
+            rotationAngle += rotationSpeed;
+            const radius = Math.min(canvas.width, canvas.height) * 0.4;
+            vertices.forEach((v, i) => {
+                const angle = (i * 2 * Math.PI) / polygonSides + Math.PI/2 + rotationAngle;
+                v.x = centerX + radius * Math.cos(angle);
+                v.y = centerY + radius * Math.sin(angle);
+            });
+        }
+
+        // Generate random hex color
+        function getRandomColor() {
+            return '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+        }
+
+        // Play piano note
+        function playNote() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            const midiNote = Math.floor(Math.random() * 25) + 48; // C3 to C5
+            const frequency = 440 * Math.pow(2, (midiNote - 69)/12);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = 'square';
+            oscillator.frequency.value = frequency;
+
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.2);
+        }
+
+        // Handle collisions
+        function checkCollisions() {
+            for (let i = 0; i < vertices.length; i++) {
+                const p1 = vertices[i];
+                const p2 = vertices[(i+1)%vertices.length];
+                
+                // Calculate closest point on edge
+                const edge = { x: p2.x - p1.x, y: p2.y - p1.y };
+                const t = Math.max(0, Math.min(1, 
+                    ((ball.x - p1.x) * edge.x + (ball.y - p1.y) * edge.y) / 
+                    (edge.x*edge.x + edge.y*edge.y)
+                ));
+                const closest = { 
+                    x: p1.x + t * edge.x, 
+                    y: p1.y + t * edge.y 
+                };
+                
+                // Check distance
+                const dx = ball.x - closest.x;
+                const dy = ball.y - closest.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance < ball.radius) {
+                    // Calculate collision normal
+                    const midpoint = { 
+                        x: (p1.x + p2.x)/2, 
+                        y: (p1.y + p2.y)/2 
+                    };
+                    const normal = {
+                        x: midpoint.x - centerX,
+                        y: midpoint.y - centerY
+                    };
+                    const length = Math.sqrt(normal.x*normal.x + normal.y*normal.y);
+                    normal.x /= length;
+                    normal.y /= length;
+
+                    // Reflect velocity
+                    const dot = ball.vx * normal.x + ball.vy * normal.y;
+                    ball.vx -= (1 + parseFloat(bouncinessSlider.value)) * dot * normal.x;
+                    ball.vy -= (1 + parseFloat(bouncinessSlider.value)) * dot * normal.y;
+
+                    // Update colors and play sound
+                    shapeColor = getRandomColor();
+                    do {
+                        shapeGlowColor = getRandomColor();
+                        ballGlowColor = getRandomColor();
+                    } while (shapeGlowColor === ballGlowColor);
+                    playNote();
+
+                    // Adjust position to prevent sticking
+                    ball.x += normal.x * (ball.radius - distance);
+                    ball.y += normal.y * (ball.radius - distance);
+                    return;
+                }
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update physics
+            updatePolygon();
+            ball.vy += parseFloat(gravitySlider.value) / parseFloat(weightSlider.value);
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            checkCollisions();
+
+            // Draw polygon
+            ctx.beginPath();
+            ctx.moveTo(vertices[0].x, vertices[0].y);
+            vertices.forEach(v => ctx.lineTo(v.x, v.y));
+            ctx.closePath();
+            ctx.fillStyle = shapeColor;
+            ctx.shadowColor = shapeGlowColor;
+            ctx.shadowBlur = 25;
+            ctx.fill();
+
+            // Draw ball
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+            ctx.fillStyle = ball.color;
+            ctx.shadowColor = ballGlowColor;
+            ctx.shadowBlur = 25;
+            ctx.fill();
+
+            // Reset shadow
+            ctx.shadowBlur = 0;
+
+            requestAnimationFrame(animate);
+        }
+
+        // Event listeners for sliders
+        sidesSlider.addEventListener('input', () => {
+            polygonSides = parseInt(sidesSlider.value);
+            sidesValue.textContent = polygonSides;
+            initPolygon();
+        });
+
+        gravitySlider.addEventListener('input', () => {
+            gravityValue.textContent = gravitySlider.value;
+        });
+
+        bouncinessSlider.addEventListener('input', () => {
+            bouncinessValue.textContent = bouncinessSlider.value;
+        });
+
+        weightSlider.addEventListener('input', () => {
+            weightValue.textContent = weightSlider.value;
+        });
+
+        // Start animation
+        initPolygon();
+        animate();
+    </script>
+</body>
+</html>
